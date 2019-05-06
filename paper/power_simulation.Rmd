@@ -1,0 +1,64 @@
+---
+title             : "Power Analysis by Simulation using R, simglm, and Shiny"
+shorttitle        : "Power by Simulation"
+
+author: 
+  - name          : "Brandon LeBeau"
+    affiliation   : "1"
+    corresponding : yes    # Define only one corresponding author
+    address       : "Postal address"
+    email         : "brandon-lebeau@uiowa.edu"
+
+affiliation:
+  - id            : "1"
+    institution   : "University of Iowa"
+
+authornote: |
+  Department of Psychological and Quantitative Foundations
+
+abstract: |
+  
+  
+keywords          : "power; simulation; R; simglm"
+wordcount         : "X"
+
+bibliography      : ["r-references.bib"]
+
+floatsintext      : no
+figurelist        : no
+tablelist         : no
+footnotelist      : no
+linenumbers       : yes
+mask              : no
+draft             : no
+
+documentclass     : "apa6"
+classoption       : "man"
+output            : papaja::apa6_pdf
+---
+
+```{r setup, include = FALSE}
+library("papaja")
+```
+
+```{r analysis-preferences}
+# Seed for random number generation
+set.seed(42)
+knitr::opts_chunk$set(cache.extra = knitr::rand_seed)
+```
+
+
+
+\newpage
+
+# References
+```{r create_r-references}
+r_refs(file = "r-references.bib")
+```
+
+\begingroup
+\setlength{\parindent}{-0.5in}
+\setlength{\leftskip}{0.5in}
+
+<div id = "refs"></div>
+\endgroup
