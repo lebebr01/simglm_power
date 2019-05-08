@@ -22,7 +22,7 @@ abstract: |
 keywords          : "power; simulation; R; simglm"
 wordcount         : "X"
 
-bibliography      : ["r-references.bib"]
+bibliography      : ["master.bib"]
 
 floatsintext      : no
 figurelist        : no
@@ -39,7 +39,152 @@ output            : papaja::apa6_pdf
 
 ```{r setup, include = FALSE}
 library("papaja")
+library(tidyverse)
+library(simglm)
 ```
+
+# Statistical Power
+
+
+## Power by Simulation
+
+
+# Benefits of Power by Simulation
+
+
+# Two-Sample t-test Example
+Power for a two-sample design using the t-test can be done with the following code for a single effect size, standardized mean difference of 0.15. This example generates power for sample sizes ranging from 4 up to 1000 increasing by intervals of 2. This will generate power values for 499 sample sizes. 
+
+```{r power-t-test}
+n <- seq(4, 1000, 2)
+power <- sapply(seq_along(n), function(i) 
+  power.t.test(n = n[i], delta = .15, sd = 1, type = 'two.sample')$power)
+```
+
+The power for the first iteration can be extracted directly using `power[1]` `r power[1]`, but generally showing a figure would be more interesting.
+
+```{r power-figure}
+power_df <- data.frame(
+  n = n,
+  power = power
+)
+
+ggplot(power_df, aes(x = n, y = power)) + 
+  geom_line(size = 2) + 
+  geom_hline(yintercept = 0.8, linetype = 2, color = 'gray30') + 
+  geom_vline(xintercept = 700, linetype = 2, color = 'gray30') +
+  scale_x_continuous("Sample Size", breaks = seq(0, 1000, 200)) + 
+  scale_y_continuous("Power", breaks = seq(0, 1, .2)) +
+  theme_bw(base_size = 14)
+```
+
+## Power Curves
+It is common for the effect size of interest to not be completely certain a priori when many power analyses are conducted. In these cases, a form of sensitivity analysis or descriptive power analyses are often conducted that vary the effect size as well. 
+
+A similar structure can be done to add the power curves for different effect sizes; the primary differences being the addition of different effect sizes in addition to the different sample size conditions. 
+
+```{r power-curve-conditions}
+effect_sizes <- c(.10, .15, .25)
+conditions <- expand.grid(n = n, effect_sizes = effect_sizes)
+head(conditions)
+```
+
+```{r power-curve}
+power_curve <- sapply(seq_len(nrow(conditions)), function(i) 
+  power.t.test(n = conditions[i, 'n'], 
+               delta = conditions[i, 'effect_sizes'], 
+               sd = 1, type = 'two.sample')$power)
+```
+
+These can then be visualized after converting to a data frame and combining with the original conditions object.
+
+```{r vis-power-curve}
+power_curve_df <- bind_cols(
+  conditions, 
+  power = power_curve
+)
+
+ggplot(power_curve_df, aes(x = n, y = power)) + 
+  geom_line(aes(color = factor(effect_sizes)), size = 2) + 
+  geom_hline(yintercept = 0.8, linetype = 2, color = 'gray30') + 
+  #geom_vline(xintercept = 700, linetype = 2, color = 'gray30') +
+  scale_x_continuous("Sample Size", breaks = seq(0, 1000, 200)) + 
+  scale_y_continuous("Power", breaks = seq(0, 1, .2)) +
+  scale_color_grey("Effect Size") +
+  theme_bw(base_size = 14)
+```
+
+
+
+
+# Two sample Power with `simglm`
+The same two sample power analysis can be conducted by simulation with the `simglm` R package [@simglm]. This package simulates data based on general(-ized) linear (mixed) models. The two sample t-test shown above can be thought of as a linear model as well with a single indicator variable that specifies which group each data point belongs to. 
+
+```{r simglm-two-samp}
+simulation_arguments <- list(
+  formula = y ~ 1 + group,
+  fixed = list(group = list(var_type = 'factor', levels = c('male', 'female'))),
+  sample_size = 20,
+  error = list(variance = 1),
+  reg_weights = c(0, .15)
+)
+
+simulate_fixed(data = NULL, simulation_arguments) %>%
+  simulate_error(simulation_arguments) %>%
+  generate_response(simulation_arguments)
+```
+
+```{r simglm-two-samp-power}
+simulation_arguments <- list(
+  formula = y ~ 1 + group,
+  fixed = list(group = list(var_type = 'factor', levels = c('male', 'female'))),
+  sample_size = 20,
+  error = list(variance = 1),
+  reg_weights = c(0, .15),
+  replications = 1000
+)
+
+replicate_simulation(simulation_arguments,
+  simulate_fixed(data = NULL, simulation_arguments) %>%
+  simulate_error(simulation_arguments) %>%
+  generate_response(simulation_arguments) %>%
+  model_fit(simulation_arguments) %>%
+  extract_coefficients()) %>%
+  compute_statistics(simulation_arguments)
+```
+
+
+```{r power-vary-arguments}
+simulation_arguments <- list(
+  formula = y ~ 1 + group,
+  fixed = list(group = list(var_type = 'factor', levels = c('male', 'female'))),
+  error = list(variance = 1),
+  reg_weights = c(0, .15),
+  replications = 1000,
+  model_fit = list(formula = y ~ 1 + group, 
+                   model_function = 'lm'),
+  power = list(
+    dist = 'qt',
+    alpha = .05,
+    opts = list(df = 18)
+  ),
+  vary_arguments = list(
+    sample_size = list(seq(20, 2000,))
+  )
+)
+
+replicate_simulation(simulation_arguments,
+  simulate_fixed(data = NULL, simulation_arguments) %>%
+  simulate_error(simulation_arguments) %>%
+  generate_response(simulation_arguments) %>%
+  model_fit(simulation_arguments) %>%
+  extract_coefficients()) %>%
+  compute_statistics(simulation_arguments)
+```
+
+
+# Repeated Measures Example
+
 
 ```{r analysis-preferences}
 # Seed for random number generation
@@ -47,6 +192,7 @@ set.seed(42)
 knitr::opts_chunk$set(cache.extra = knitr::rand_seed)
 ```
 
+# Summary
 
 
 \newpage
