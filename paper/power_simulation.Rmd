@@ -43,6 +43,12 @@ library(tidyverse)
 library(simglm)
 ```
 
+```{r analysis-preferences}
+# Seed for random number generation
+set.seed(42)
+knitr::opts_chunk$set(cache.extra = knitr::rand_seed)
+```
+
 # Statistical Power
 
 
@@ -117,13 +123,14 @@ ggplot(power_curve_df, aes(x = n, y = power)) +
 
 
 
-# Two sample Power with `simglm`
+# Two sample Data simulation with `simglm`
 The same two sample power analysis can be conducted by simulation with the `simglm` R package [@simglm]. This package simulates data based on general(-ized) linear (mixed) models. The two sample t-test shown above can be thought of as a linear model as well with a single indicator variable that specifies which group each data point belongs to. 
 
 ```{r simglm-two-samp}
 simulation_arguments <- list(
   formula = y ~ 1 + group,
-  fixed = list(group = list(var_type = 'factor', levels = c('male', 'female'))),
+  fixed = list(group = list(var_type = 'factor', 
+                            levels = c('male', 'female'))),
   sample_size = 20,
   error = list(variance = 1),
   reg_weights = c(0, .15)
@@ -134,10 +141,13 @@ simulate_fixed(data = NULL, simulation_arguments) %>%
   generate_response(simulation_arguments)
 ```
 
+## Using `simglm` to generate power
+
 ```{r simglm-two-samp-power}
 simulation_arguments <- list(
   formula = y ~ 1 + group,
-  fixed = list(group = list(var_type = 'factor', levels = c('male', 'female'))),
+  fixed = list(group = list(var_type = 'factor', 
+                            levels = c('male', 'female'))),
   sample_size = 20,
   error = list(variance = 1),
   reg_weights = c(0, .15),
@@ -157,7 +167,8 @@ replicate_simulation(simulation_arguments,
 ```{r power-vary-arguments}
 simulation_arguments <- list(
   formula = y ~ 1 + group,
-  fixed = list(group = list(var_type = 'factor', levels = c('male', 'female'))),
+  fixed = list(group = list(var_type = 'factor', 
+                            levels = c('male', 'female'))),
   error = list(variance = 1),
   reg_weights = c(0, .15),
   replications = 1000,
@@ -169,7 +180,7 @@ simulation_arguments <- list(
     opts = list(df = 18)
   ),
   vary_arguments = list(
-    sample_size = list(seq(20, 2000,))
+    sample_size = list(list(level1 = seq(20, 2000, 4))
   )
 )
 
@@ -184,13 +195,7 @@ replicate_simulation(simulation_arguments,
 
 
 # Repeated Measures Example
-
-
-```{r analysis-preferences}
-# Seed for random number generation
-set.seed(42)
-knitr::opts_chunk$set(cache.extra = knitr::rand_seed)
-```
+For more complicated designs, closed form solutions are not always possible as ways to estimate statistical power or they make strong assumptions on the data that may not be reasonable given the data that are to be collected. 
 
 # Summary
 
