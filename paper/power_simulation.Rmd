@@ -38,9 +38,8 @@ output            : papaja::apa6_pdf
 ---
 
 ```{r setup, include = FALSE}
-library("papaja")
-library(tidyverse)
-library(simglm)
+library(papaja)
+
 ```
 
 ```{r analysis-preferences}
@@ -55,11 +54,18 @@ knitr::opts_chunk$set(cache.extra = knitr::rand_seed)
 ## Power by Simulation
 
 
-# Benefits of Power by Simulation
+## Benefits of Power by Simulation
 
 
 # Two-Sample t-test Example
 Power for a two-sample design using the t-test can be done with the following code for a single effect size, standardized mean difference of 0.15. This example generates power for sample sizes ranging from 4 up to 1000 increasing by intervals of 2. This will generate power values for 499 sample sizes. 
+
+```{r packages-to-load}
+library(tidyverse)
+library(simglm)
+library(future.apply)
+```
+
 
 ```{r power-t-test}
 n <- seq(4, 1000, 2)
@@ -144,6 +150,8 @@ simulate_fixed(data = NULL, simulation_arguments) %>%
 ## Using `simglm` to generate power
 
 ```{r simglm-two-samp-power}
+plan(multiprocess)
+
 simulation_arguments <- list(
   formula = y ~ 1 + group,
   fixed = list(group = list(var_type = 'factor', 
@@ -151,16 +159,15 @@ simulation_arguments <- list(
   sample_size = 20,
   error = list(variance = 1),
   reg_weights = c(0, .15),
-  replications = 1000
+  replications = 1000,
+  model_fit = list(formula = y ~ 1 + group, 
+                   model_function = 'lm'),
+  extract_coefficients = TRUE
 )
 
-replicate_simulation(simulation_arguments,
-  simulate_fixed(data = NULL, simulation_arguments) %>%
-  simulate_error(simulation_arguments) %>%
-  generate_response(simulation_arguments) %>%
-  model_fit(simulation_arguments) %>%
-  extract_coefficients()) %>%
-  compute_statistics(simulation_arguments)
+replicate_simulation(simulation_arguments) %>%
+  compute_statistics(simulation_arguments, power = TRUE,
+                     type_1_error = FALSE, precision = TRUE)
 ```
 
 
@@ -175,27 +182,244 @@ simulation_arguments <- list(
   model_fit = list(formula = y ~ 1 + group, 
                    model_function = 'lm'),
   power = list(
-    dist = 'qt',
-    alpha = .05,
-    opts = list(df = 18)
+    dist = 'qnorm',
+    alpha = .05
   ),
+  extract_coefficients = TRUE,
   vary_arguments = list(
-    sample_size = list(list(level1 = seq(20, 2000, 4))
+    sample_size = seq(20, 2000, 4)
   )
 )
 
-replicate_simulation(simulation_arguments,
-  simulate_fixed(data = NULL, simulation_arguments) %>%
-  simulate_error(simulation_arguments) %>%
-  generate_response(simulation_arguments) %>%
-  model_fit(simulation_arguments) %>%
-  extract_coefficients()) %>%
-  compute_statistics(simulation_arguments)
+power_results <- replicate_simulation(simulation_arguments) %>%
+  compute_statistics(simulation_arguments, power = TRUE,
+                     type_1_error = FALSE, precision = TRUE)
+```
+
+```{r simglm-manipulation}
+power_results <- power_results %>%
+  ungroup() %>%
+  mutate(sample_size = as.numeric(as.character(sample_size))) %>%
+  arrange(sample_size) %>%
+  filter(term == 'group')
+head(power_results, n = 10)
 ```
 
 
+This result can then be explored visually to generate a power curve. 
+
+```{r simglm-power-curve, message = FALSE}
+ggplot(power_results, aes(x = sample_size, y = power)) + 
+  geom_point(size = 1.5, color = 'gray40') + 
+  geom_hline(yintercept = 0.8, linetype = 2, color = 'gray30') + 
+  geom_smooth(linetype = 1, size = 1, se = FALSE) +
+  geom_vline(xintercept = 1488, linetype = 2, color = 'gray30') +
+  scale_x_continuous("Sample Size", breaks = seq(0, 2000, 200)) + 
+  scale_y_continuous("Power", breaks = seq(0, 1, .2)) +
+  theme_bw(base_size = 14)
+```
+
+
+## Add Heterogeneity
+Heterogeneity is a common phenomenon that can impact power and can occur when there are population variance differences across the two groups. In the above example, this would mean that there would be variance differences across males and females, perhaps males are more variable in the outcome. The `pwr.t.test()` function from before does not assume heterogeneity, however this is possible to incorporate when doing power from a simulation framework. Adding these conditions can help to mimic real world conditions and also maybe provide a better estimate of power.
+
+```{r heterogeneity}
+simulation_arguments <- list(
+  formula = y ~ 1 + group,
+  fixed = list(group = list(var_type = 'factor', 
+                            levels = c('male', 'female'))),
+  error = list(variance = 1),
+  heterogeneity = list(variable = 'group',
+                       variance = c(1, 8)),
+  reg_weights = c(0, .15),
+  replications = 1000,
+  model_fit = list(formula = y ~ 1 + group, 
+                   model_function = 'lm'),
+  power = list(
+    dist = 'qnorm',
+    alpha = .05
+  ),
+  extract_coefficients = TRUE,
+  vary_arguments = list(
+    sample_size = seq(20, 2000, 4)
+  )
+)
+
+power_results_h <- replicate_simulation(simulation_arguments) %>%
+  compute_statistics(simulation_arguments, power = TRUE,
+                     type_1_error = FALSE, precision = TRUE)
+```
+
+```{r heterogeneity-data-manip}
+power_results_h <- power_results_h %>%
+  ungroup() %>%
+  mutate(sample_size = as.numeric(as.character(sample_size)),
+         heterogeneity = TRUE) %>%
+  arrange(sample_size) %>%
+  filter(term == 'group')
+
+power_results <- power_results %>%
+  mutate(heterogeneity = FALSE)
+
+power_results_combined <- bind_rows(power_results, 
+                                    power_results_h)
+```
+
+```{r simglm-power-curve-h, message = FALSE}
+ggplot(power_results_combined, aes(x = sample_size, y = power, 
+                          group = heterogeneity)) + 
+  geom_point(aes(shape = heterogeneity), size = 1.5, color = 'gray40') + 
+  geom_hline(yintercept = 0.8, linetype = 2, color = 'gray30') + 
+  geom_smooth(aes(linetype = heterogeneity), size = 1, se = FALSE) +
+  #geom_vline(xintercept = 1488, linetype = 2, color = 'gray30') +
+  scale_x_continuous("Sample Size", breaks = seq(0, 2000, 200)) + 
+  scale_y_continuous("Power", breaks = seq(0, 1, .2)) +
+  theme_bw(base_size = 14)
+```
+
+
+
+
 # Repeated Measures Example
-For more complicated designs, closed form solutions are not always possible as ways to estimate statistical power or they make strong assumptions on the data that may not be reasonable given the data that are to be collected. 
+For more complicated designs, closed form solutions are not always possible as ways to estimate statistical power or they make strong assumptions on the data that may not be reasonable given the data that are to be collected. The data simulation for the repeated measures portion adds a hierarchical data structure in which repeated measures are nested within individuals. These type of data add a correlation structure that needs to be modeled appropriately for valid inferences. Modern models to handle this dependency include the linear mixed model (LMM), sometimes known as the hierarchical linear model (HLM) or multilevel model. 
+
+This framework is an extension of the linear model considered above in the two group model. The extension includes the addition of random effects which represent subject specific deviations from the average trejectories. These random effects are what account for the dependency due to repeated measurements and nested data structure. In addition to the addition of random effects, two sample sizes need to be given, one representing the number of measurement occasions for each individual and another representing how individuals to generate. Therefore, in the balanced case (i.e. same number of measurement occasions for each individual), the total sample size (i.e. number of rows in the data) will be the number of measurement occasions times the number of individuals. This is a good initial check to ensure that the number of records are correct.
+
+```{r sim-longitudinal}
+sim_arguments <- list(
+  formula = y ~ 1 + time + sex + (1 + time | individual),
+  reg_weights = c(4, 0.4, 0.25),
+  error = list(variance = 1),
+  fixed = list(time = list(var_type = 'time'),
+               sex = list(var_type = 'factor', levels = c('male', 'female'),
+                          var_level = 2)),
+  randomeffect = list(int_individual = list(variance = 1, var_level = 2),
+                      time_individual = list(variance = 0.5, var_level = 2)),
+  sample_size = list(level1 = 10, level2 = 20)
+)
+
+longitudinal_data <- sim_arguments %>%
+  simulate_fixed(data = NULL, .) %>%
+  simulate_randomeffect(sim_arguments) %>%
+  simulate_error(sim_arguments) %>%
+  generate_response(sim_arguments)
+```
+
+## Power for Repeated Measures
+
+```{r rm-power}
+library(lme4)
+
+sim_arguments <- list(
+  formula = y ~ 1 + time + sex + (1 + time | individual),
+  reg_weights = c(4, 0.4, 0.25),
+  error = list(variance = 1),
+  fixed = list(time = list(var_type = 'time'),
+               sex = list(var_type = 'factor', levels = c('male', 'female'),
+                          var_level = 2)),
+  randomeffect = list(int_individual = list(variance = 1, var_level = 2),
+                      time_individual = list(variance = 0.5, var_level = 2)),
+  sample_size = list(level1 = 10, level2 = 500),
+  replications = 1000,
+  model_fit = list(formula = y ~ 1 + time + sex + (1 + time | individual), 
+                   model_function = 'lmer'),
+  extract_coefficients = TRUE
+)
+
+replicate_simulation(sim_arguments) %>%
+  compute_statistics(sim_arguments, power = TRUE,
+                     type_1_error = FALSE, precision = TRUE)
+```
+
+### Varying simulation conditions
+
+```{r vary-conditions}
+sim_arguments <- list(
+  formula = y ~ 1 + time + sex + (1 + time | individual),
+  reg_weights = c(4, 0.4, 0.25),
+  error = list(variance = 1),
+  fixed = list(time = list(var_type = 'time'),
+               sex = list(var_type = 'factor', levels = c('male', 'female'),
+                          var_level = 2)),
+  randomeffect = list(int_individual = list(variance = 1, var_level = 2),
+                      time_individual = list(variance = 0.5, var_level = 2)),
+  replications = 1000,
+  model_fit = list(formula = y ~ 1 + time + sex + (1 + time | individual), 
+                   model_function = 'lmer'),
+  extract_coefficients = TRUE,
+  vary_arguments = list(
+    sample_size = list(list(level1 = 5, level2 = 50),
+                       list(level1 = 5, level2 = 75),
+                       list(level1 = 5, level2 = 100),
+                       list(level1 = 8, level2 = 50),
+                       list(level1 = 8, level2 = 75),
+                       list(level1 = 8, level2 = 100))
+  )
+)
+
+long_power_nomiss <- replicate_simulation(sim_arguments) %>%
+  compute_statistics(sim_arguments, power = TRUE,
+                     type_1_error = FALSE, precision = TRUE)
+```
+
+```{r long-power-miss}
+sim_arguments <- list(
+  formula = y ~ 1 + time + sex + (1 + time | individual),
+  reg_weights = c(4, 0.4, 0.25),
+  error = list(variance = 1),
+  fixed = list(time = list(var_type = 'time'),
+               sex = list(var_type = 'factor', levels = c('male', 'female'),
+                          var_level = 2)),
+  randomeffect = list(int_individual = list(variance = 1, var_level = 2),
+                      time_individual = list(variance = 0.5, var_level = 2)),
+  replications = 1000,
+  model_fit = list(formula = y_miss ~ 1 + time + sex + (1 + time | individual), 
+                   model_function = 'lmer'),
+  missing_data = list(new_outcome = 'y_miss', miss_prop = .20,
+                      clust_var = 'individual', type = 'dropout'),
+  extract_coefficients = TRUE,
+  vary_arguments = list(
+    sample_size = list(list(level1 = 5, level2 = 50),
+                       list(level1 = 5, level2 = 75),
+                       list(level1 = 5, level2 = 100),
+                       list(level1 = 8, level2 = 50),
+                       list(level1 = 8, level2 = 75),
+                       list(level1 = 8, level2 = 100))
+  )
+)
+
+long_power_miss <- replicate_simulation(sim_arguments) %>%
+  compute_statistics(sim_arguments, power = TRUE,
+                     type_1_error = FALSE, precision = TRUE)
+```
+
+
+```{r heterogeneity-data-manip}
+long_power_nomiss_h <- long_power_nomiss %>%
+  ungroup() %>%
+  mutate(sample_size = gsub("^list\\(|\\)$", "", as.character(sample_size)),
+         missing = FALSE)
+
+long_power_miss_h <- long_power_miss %>%
+  ungroup() %>%
+  mutate(sample_size = gsub("^list\\(|\\)$", "", as.character(sample_size)), 
+         missing = TRUE)
+
+long_power_combined <- bind_rows(long_power_nomiss_h, 
+                                    long_power_miss_h)
+```
+
+```{r simglm-power-curve-h, message = FALSE}
+ggplot(long_power_combined, aes(x = sample_size, y = power, 
+                          group = missing)) + 
+  geom_point(aes(shape = missing), size = 1.5, color = 'gray40') + 
+  geom_hline(yintercept = 0.8, linetype = 2, color = 'gray30') + 
+  geom_smooth(aes(linetype = missing), size = 1, se = FALSE) +
+  #geom_vline(xintercept = 1488, linetype = 2, color = 'gray30') +
+  scale_x_continuous("Sample Size", breaks = seq(0, 2000, 200)) + 
+  scale_y_continuous("Power", breaks = seq(0, 1, .2)) +
+  theme_bw(base_size = 14)
+```
 
 # Summary
 
