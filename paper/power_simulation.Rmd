@@ -28,7 +28,7 @@ floatsintext      : no
 figurelist        : no
 tablelist         : no
 footnotelist      : no
-linenumbers       : yes
+linenumbers       : no
 mask              : no
 draft             : no
 
@@ -48,26 +48,55 @@ set.seed(42)
 knitr::opts_chunk$set(cache.extra = knitr::rand_seed)
 ```
 
-# Statistical Power
+Statistical power is the probability that a statistical analysis is able to detect a non-zero population effect for a binary hypothesis test. In probability terms, statistical power reflects the probability of correctly rejecting the null hypothesis when it is false in the population or mathematically as: $power = P(reject \; H_{0} \; | \; H_{1} \; is \; true)$. The inverse of power is the probability of making a type II error or the false negative rate. 
+
+Power analyses can take on two forms, a priori power analyses occur prior to collecting data and post hoc power analyses occur after data analysis. Post hoc power analyses are controversial, can be misleading given the analysis has already been done, and can give inaccurate results when calculating power using sample data. Therefore, this paper will focus on a priori power analyses, however the process described in this paper could be applied to post hoc power analyses. 
+
+## Factors affecting power
+There are numerous known factors that can impact power in a given analysis. The most well known include sample size, the alpha rate or false positive rate, and the magnitude of the effect size. Other factors such as statistical design, statistical analysis, missing data, or whether statistical assumptions have been met. 
+
+# Traditional procedures for power
+Power is often evaluated using closed form solutions that assume statistical assumptions hold. For example, residuals for many statistical analyses are assumed to follow a normal distribution.
+
+Statistical software has been developed to estimate power when these statistical assumptions have been made such as [G*Power](http://www.gpower.hhu.de/), [PowerUp!](https://www.causalevaluation.org/power-analysis.html), or [Optimal Design](http://hlmsoft.net/od/). There are also packages in statistical software programs such as [pwr](https://cran.r-project.org/package=pwr), [WebPower](https://cran.r-project.org/package=WebPower), or [stats](https://cran.r-project.org/package=STAT) in R or [statsmodels](http://www.statsmodels.org/) in Python that estimate power for relatively simple statistical analyses such as t-tests, analysis of variance (ANOVA), linear regression, correlation, or general linear models. G*Power implements power for similar analyses as those found in traditional statistcal software implementations, but offers a graphical user interface (GUI) that may aid users in the power estimation. Finally, the specialized software, PowerUp! and Optimal Design are commonly used to estimate power for randomized control trials and when there are nesting effects that are common in educational or pscyhological research. 
+
+Power can be estimated to explore what the probability is given a specific effect size. The minimum detectable effect size given specific sample sizes can also be estimated for power analyses. The latter is often estimated when writing grant applications where the minimum detectable effect size is estimated for specified power levels. Regardless of the framework, it needs to be articulated whether the effect size is of substantive interest and large enough to have a meaningful effect in the population. 
 
 
-## Power by Simulation
+# Power by Simulation
+Power by simulation differs from the traditional approaches in that it is able to be flexible to evaluate the impact on power when statistical assumptions are not met or under different missing data mechanisms which may better reflect realistic data collection conditions. 
 
+The following are genearl steps that are taken in a power by simulation example.
+
+1. Assume population parameters, including
+    - population effect size(s) of interest.
+    - distribution of variable(s) and residuals.
+    - variance of variable(s) and residuals.
+2. Simulate data based on a statistical model.
+3. Fit a statistical model to the simulated data.
+4. Replicate steps 1 - 3 many times.
+5. Calculate the proportion of statistical tests that appropriate reject the null hypothesis.
+
+In the power by simulation framework, data are simulated based on assumed values for the population, for example the population mean difference between two groups. Given that these values are true, data are simulated many times, replicated, and a statistical model is fitted to the simulated data. To estimate power in this framework, the number of statistical tests that properly reject the null hypothesis compared to the number of replications
 
 ## Benefits of Power by Simulation
+Power by simulation can be used for any statistical design or statistical analysis. The limiting factor is the ability of the researcher to use statistical software to follow the steps outlined above. Power by simulation can allow researchers to relax statistical assumptions that may have an impact on statistical power and more readily mirror real data conditions. If statistical assumptions do not hold in the population, the power analysis that makes these assumptions will commonly overestimate power. This can have important considerations and implications for researchers, funders, or other relavent stakeholders that are invested in the research idea.
+
+Furthermore, as power by simulation is not limited by the software and the steps for employing a power by simulation analysis are the same regardless of the statistical design or analysis, once the process of simluation by power are well understood, the only major change across different statistical designs and analysis are the generating and fitted models. In some cases, getting estimates of population effects may be more challenging as the model complexity increases, but this can be a limiting factor of traditional power analyses as well.
 
 
 # Two-Sample t-test Example
 Power for a two-sample design using the t-test can be done with the following code for a single effect size, standardized mean difference of 0.15. This example generates power for sample sizes ranging from 4 up to 1000 increasing by intervals of 2. This will generate power values for 499 sample sizes. 
 
-```{r packages-to-load}
+```{r packages-to-load, echo = TRUE}
 library(tidyverse)
 library(simglm)
 library(future.apply)
+library(lme4)
 ```
 
 
-```{r power-t-test}
+```{r power-t-test, echo = TRUE}
 n <- seq(4, 1000, 2)
 power <- sapply(seq_along(n), function(i) 
   power.t.test(n = n[i], delta = .15, sd = 1, type = 'two.sample')$power)
@@ -75,7 +104,7 @@ power <- sapply(seq_along(n), function(i)
 
 The power for the first iteration can be extracted directly using `power[1]` `r power[1]`, but generally showing a figure would be more interesting.
 
-```{r power-figure}
+```{r power-figure, echo = TRUE}
 power_df <- data.frame(
   n = n,
   power = power
@@ -95,13 +124,13 @@ It is common for the effect size of interest to not be completely certain a prio
 
 A similar structure can be done to add the power curves for different effect sizes; the primary differences being the addition of different effect sizes in addition to the different sample size conditions. 
 
-```{r power-curve-conditions}
+```{r power-curve-conditions, echo = TRUE}
 effect_sizes <- c(.10, .15, .25)
 conditions <- expand.grid(n = n, effect_sizes = effect_sizes)
 head(conditions)
 ```
 
-```{r power-curve}
+```{r power-curve, echo = TRUE}
 power_curve <- sapply(seq_len(nrow(conditions)), function(i) 
   power.t.test(n = conditions[i, 'n'], 
                delta = conditions[i, 'effect_sizes'], 
@@ -110,7 +139,7 @@ power_curve <- sapply(seq_len(nrow(conditions)), function(i)
 
 These can then be visualized after converting to a data frame and combining with the original conditions object.
 
-```{r vis-power-curve}
+```{r vis-power-curve, echo = TRUE}
 power_curve_df <- bind_cols(
   conditions, 
   power = power_curve
@@ -132,10 +161,10 @@ ggplot(power_curve_df, aes(x = n, y = power)) +
 # Two sample Data simulation with `simglm`
 The same two sample power analysis can be conducted by simulation with the `simglm` R package [@simglm]. This package simulates data based on general(-ized) linear (mixed) models. The two sample t-test shown above can be thought of as a linear model as well with a single indicator variable that specifies which group each data point belongs to. 
 
-```{r simglm-two-samp}
+```{r simglm-two-samp, echo = TRUE}
 simulation_arguments <- list(
-  formula = y ~ 1 + group,
-  fixed = list(group = list(var_type = 'factor', 
+  formula = y ~ 1 + sex,
+  fixed = list(sex = list(var_type = 'factor', 
                             levels = c('male', 'female'))),
   sample_size = 20,
   error = list(variance = 1),
@@ -149,37 +178,42 @@ simulate_fixed(data = NULL, simulation_arguments) %>%
 
 ## Using `simglm` to generate power
 
-```{r simglm-two-samp-power}
+```{r simglm-two-samp-power, echo = TRUE}
 plan(multiprocess)
 
 simulation_arguments <- list(
-  formula = y ~ 1 + group,
-  fixed = list(group = list(var_type = 'factor', 
+  formula = y ~ 1 + sex,
+  fixed = list(sex = list(var_type = 'factor', 
                             levels = c('male', 'female'))),
   sample_size = 20,
   error = list(variance = 1),
   reg_weights = c(0, .15),
   replications = 1000,
-  model_fit = list(formula = y ~ 1 + group, 
+  model_fit = list(formula = y ~ 1 + sex, 
                    model_function = 'lm'),
   extract_coefficients = TRUE
 )
 
-replicate_simulation(simulation_arguments) %>%
+replicate_sim <- replicate_simulation(simulation_arguments)
+```
+
+```{r compute-stats, echo = TRUE}
+replicate_sim %>%
   compute_statistics(simulation_arguments, power = TRUE,
                      type_1_error = FALSE, precision = TRUE)
 ```
 
 
-```{r power-vary-arguments}
+
+```{r power-vary-arguments, cache = TRUE, echo = TRUE}
 simulation_arguments <- list(
-  formula = y ~ 1 + group,
-  fixed = list(group = list(var_type = 'factor', 
+  formula = y ~ 1 + sex, 
+  fixed = list(sex = list(var_type = 'factor', 
                             levels = c('male', 'female'))),
   error = list(variance = 1),
   reg_weights = c(0, .15),
   replications = 1000,
-  model_fit = list(formula = y ~ 1 + group, 
+  model_fit = list(formula = y ~ 1 + sex,
                    model_function = 'lm'),
   power = list(
     dist = 'qnorm',
@@ -187,28 +221,33 @@ simulation_arguments <- list(
   ),
   extract_coefficients = TRUE,
   vary_arguments = list(
-    sample_size = seq(20, 2000, 4)
+    sample_size = seq(20, 2000, 20) 
   )
 )
 
-power_results <- replicate_simulation(simulation_arguments) %>%
+model_results <- replicate_simulation(simulation_arguments) 
+```
+
+```{r power-results, echo = TRUE}
+power_results <- model_results %>%
   compute_statistics(simulation_arguments, power = TRUE,
                      type_1_error = FALSE, precision = TRUE)
 ```
 
-```{r simglm-manipulation}
+
+```{r simglm-manipulation, echo = TRUE}
 power_results <- power_results %>%
   ungroup() %>%
   mutate(sample_size = as.numeric(as.character(sample_size))) %>%
   arrange(sample_size) %>%
-  filter(term == 'group')
+  filter(term == 'sex')
 head(power_results, n = 10)
 ```
 
 
 This result can then be explored visually to generate a power curve. 
 
-```{r simglm-power-curve, message = FALSE}
+```{r simglm-power-curve, message = FALSE, echo = TRUE}
 ggplot(power_results, aes(x = sample_size, y = power)) + 
   geom_point(size = 1.5, color = 'gray40') + 
   geom_hline(yintercept = 0.8, linetype = 2, color = 'gray30') + 
@@ -220,10 +259,37 @@ ggplot(power_results, aes(x = sample_size, y = power)) +
 ```
 
 
+## Visualizing estimates and p-values
+Exploring the estimates and the p-values can be informative over and above the power graphics shown above. The model results are stored in the object, `model_results` shown above as a list for each replicated condition. This means that for each sample size, there are 1000 estimates for the group effect and the associated p-values based on these. 
+
+```{r estimate-figure, echo = TRUE}
+model_results_df <- bind_rows(model_results) %>%
+  filter(term == 'sex') %>%
+  mutate(sample_size = as.numeric(as.character(sample_size)))
+
+ggplot(model_results_df, aes(x = sample_size, y = estimate)) + 
+  geom_boxplot(aes(group = sample_size), outlier.alpha = 0.01) +
+  scale_x_continuous("Sample Size", breaks = seq(0, 2000, 200)) +
+  theme_bw(base_size = 14) +
+  geom_hline(yintercept = .15, linetype = 2, size = 2, color = 'gray20') +
+  coord_flip()
+```
+
+```{r p-value-figure, echo = TRUE}
+ggplot(model_results_df, aes(x = sample_size, y = p.value)) + 
+  geom_boxplot(aes(group = sample_size), outlier.alpha = 0.01) +
+  scale_x_continuous("Sample Size", breaks = seq(0, 2000, 200)) +
+  theme_bw(base_size = 14) +
+  geom_hline(yintercept = .05, linetype = 2, size = 2, color = 'gray20') +
+  coord_flip()
+```
+
+
+
 ## Add Heterogeneity
 Heterogeneity is a common phenomenon that can impact power and can occur when there are population variance differences across the two groups. In the above example, this would mean that there would be variance differences across males and females, perhaps males are more variable in the outcome. The `pwr.t.test()` function from before does not assume heterogeneity, however this is possible to incorporate when doing power from a simulation framework. Adding these conditions can help to mimic real world conditions and also maybe provide a better estimate of power.
 
-```{r heterogeneity}
+```{r heterogeneity, cache = TRUE, echo = TRUE}
 simulation_arguments <- list(
   formula = y ~ 1 + group,
   fixed = list(group = list(var_type = 'factor', 
@@ -241,17 +307,17 @@ simulation_arguments <- list(
   ),
   extract_coefficients = TRUE,
   vary_arguments = list(
-    sample_size = seq(20, 2000, 4)
+    sample_size = seq(20, 2000, 20) 
   )
 )
 
-power_results_h <- replicate_simulation(simulation_arguments) %>%
-  compute_statistics(simulation_arguments, power = TRUE,
-                     type_1_error = FALSE, precision = TRUE)
+model_results_h <- replicate_simulation(simulation_arguments)
 ```
 
-```{r heterogeneity-data-manip}
-power_results_h <- power_results_h %>%
+```{r heterogeneity-data-manip, echo = TRUE}
+power_results_h <- model_results_h %>%
+  compute_statistics(simulation_arguments, power = TRUE,
+                     type_1_error = FALSE, precision = TRUE) %>%
   ungroup() %>%
   mutate(sample_size = as.numeric(as.character(sample_size)),
          heterogeneity = TRUE) %>%
@@ -265,7 +331,7 @@ power_results_combined <- bind_rows(power_results,
                                     power_results_h)
 ```
 
-```{r simglm-power-curve-h, message = FALSE}
+```{r simglm-power-curve-h, message = FALSE, echo = TRUE}
 ggplot(power_results_combined, aes(x = sample_size, y = power, 
                           group = heterogeneity)) + 
   geom_point(aes(shape = heterogeneity), size = 1.5, color = 'gray40') + 
@@ -285,17 +351,17 @@ For more complicated designs, closed form solutions are not always possible as w
 
 This framework is an extension of the linear model considered above in the two group model. The extension includes the addition of random effects which represent subject specific deviations from the average trejectories. These random effects are what account for the dependency due to repeated measurements and nested data structure. In addition to the addition of random effects, two sample sizes need to be given, one representing the number of measurement occasions for each individual and another representing how individuals to generate. Therefore, in the balanced case (i.e. same number of measurement occasions for each individual), the total sample size (i.e. number of rows in the data) will be the number of measurement occasions times the number of individuals. This is a good initial check to ensure that the number of records are correct.
 
-```{r sim-longitudinal}
+```{r sim-longitudinal, echo = TRUE}
 sim_arguments <- list(
-  formula = y ~ 1 + time + sex + (1 + time | individual),
-  reg_weights = c(4, 0.4, 0.25),
+  formula = y ~ 1 + time + sex + time:sex + (1 + time | individual),
+  reg_weights = c(4, 0.4, 0.3, 0.20),
   error = list(variance = 1),
   fixed = list(time = list(var_type = 'time'),
                sex = list(var_type = 'factor', levels = c('male', 'female'),
                           var_level = 2)),
   randomeffect = list(int_individual = list(variance = 1, var_level = 2),
                       time_individual = list(variance = 0.5, var_level = 2)),
-  sample_size = list(level1 = 10, level2 = 20)
+  sample_size = list(level1 = 10, level2 = 500)
 )
 
 longitudinal_data <- sim_arguments %>%
@@ -307,12 +373,10 @@ longitudinal_data <- sim_arguments %>%
 
 ## Power for Repeated Measures
 
-```{r rm-power}
-library(lme4)
-
+```{r rm-power, cache = TRUE, warning = FALSE, message = FALSE, echo = TRUE}
 sim_arguments <- list(
-  formula = y ~ 1 + time + sex + (1 + time | individual),
-  reg_weights = c(4, 0.4, 0.25),
+  formula = y ~ 1 + time + sex + time:sex + (1 + time | individual),
+  reg_weights = c(4, 0.4, 0.3, 0.20),
   error = list(variance = 1),
   fixed = list(time = list(var_type = 'time'),
                sex = list(var_type = 'factor', levels = c('male', 'female'),
@@ -321,22 +385,28 @@ sim_arguments <- list(
                       time_individual = list(variance = 0.5, var_level = 2)),
   sample_size = list(level1 = 10, level2 = 500),
   replications = 1000,
-  model_fit = list(formula = y ~ 1 + time + sex + (1 + time | individual), 
+  model_fit = list(formula = y ~ 1 + time + sex + time:sex + 
+                     (1 + time | individual), 
                    model_function = 'lmer'),
   extract_coefficients = TRUE
 )
 
-replicate_simulation(sim_arguments) %>%
+long_models <- replicate_simulation(sim_arguments)
+```
+
+```{r long-compute, echo = TRUE}
+long_models %>%
   compute_statistics(sim_arguments, power = TRUE,
                      type_1_error = FALSE, precision = TRUE)
 ```
 
+
 ### Varying simulation conditions
 
-```{r vary-conditions}
+```{r vary-conditions, cache = TRUE, warning = FALSE, message = FALSE, echo = TRUE}
 sim_arguments <- list(
-  formula = y ~ 1 + time + sex + (1 + time | individual),
-  reg_weights = c(4, 0.4, 0.25),
+  formula = y ~ 1 + time + sex + time:sex + (1 + time | individual),
+  reg_weights = c(4, 0.4, 0.3, 0.20),
   error = list(variance = 1),
   fixed = list(time = list(var_type = 'time'),
                sex = list(var_type = 'factor', levels = c('male', 'female'),
@@ -344,28 +414,34 @@ sim_arguments <- list(
   randomeffect = list(int_individual = list(variance = 1, var_level = 2),
                       time_individual = list(variance = 0.5, var_level = 2)),
   replications = 1000,
-  model_fit = list(formula = y ~ 1 + time + sex + (1 + time | individual), 
+  model_fit = list(formula = y ~ 1 + time + sex + time:sex + 
+                     (1 + time | individual), 
                    model_function = 'lmer'),
   extract_coefficients = TRUE,
   vary_arguments = list(
     sample_size = list(list(level1 = 5, level2 = 50),
-                       list(level1 = 5, level2 = 75),
-                       list(level1 = 5, level2 = 100),
+                       list(level1 = 5, level2 = 150),
+                       list(level1 = 5, level2 = 250),
                        list(level1 = 8, level2 = 50),
-                       list(level1 = 8, level2 = 75),
-                       list(level1 = 8, level2 = 100))
+                       list(level1 = 8, level2 = 150),
+                       list(level1 = 8, level2 = 250))
   )
 )
 
-long_power_nomiss <- replicate_simulation(sim_arguments) %>%
+long_model_nomiss <- replicate_simulation(sim_arguments) 
+```
+
+```{r long-model-power, echo = TRUE}
+long_power_nomiss <- long_model_nomiss %>%
   compute_statistics(sim_arguments, power = TRUE,
                      type_1_error = FALSE, precision = TRUE)
 ```
 
-```{r long-power-miss}
+
+```{r long-model-miss, cache = TRUE, warning = FALSE, message = FALSE, echo = TRUE}
 sim_arguments <- list(
-  formula = y ~ 1 + time + sex + (1 + time | individual),
-  reg_weights = c(4, 0.4, 0.25),
+  formula = y ~ 1 + time + sex + time:sex + (1 + time | individual),
+  reg_weights = c(4, 0.4, 0.3, 0.20),
   error = list(variance = 1),
   fixed = list(time = list(var_type = 'time'),
                sex = list(var_type = 'factor', levels = c('male', 'female'),
@@ -373,28 +449,34 @@ sim_arguments <- list(
   randomeffect = list(int_individual = list(variance = 1, var_level = 2),
                       time_individual = list(variance = 0.5, var_level = 2)),
   replications = 1000,
-  model_fit = list(formula = y_miss ~ 1 + time + sex + (1 + time | individual), 
+  model_fit = list(formula = y_miss ~ 1 + time + sex + time:sex + 
+                     (1 + time | individual), 
                    model_function = 'lmer'),
   missing_data = list(new_outcome = 'y_miss', miss_prop = .20,
                       clust_var = 'individual', type = 'dropout'),
   extract_coefficients = TRUE,
   vary_arguments = list(
     sample_size = list(list(level1 = 5, level2 = 50),
-                       list(level1 = 5, level2 = 75),
-                       list(level1 = 5, level2 = 100),
+                       list(level1 = 5, level2 = 150),
+                       list(level1 = 5, level2 = 250),
                        list(level1 = 8, level2 = 50),
-                       list(level1 = 8, level2 = 75),
-                       list(level1 = 8, level2 = 100))
+                       list(level1 = 8, level2 = 150),
+                       list(level1 = 8, level2 = 250))
   )
 )
 
-long_power_miss <- replicate_simulation(sim_arguments) %>%
+long_model_miss <- replicate_simulation(sim_arguments) 
+```
+
+```{r long-power-miss, echo = TRUE}
+long_power_miss <- long_model_miss %>%
   compute_statistics(sim_arguments, power = TRUE,
                      type_1_error = FALSE, precision = TRUE)
 ```
 
 
-```{r heterogeneity-data-manip}
+
+```{r long-data-manip, echo = TRUE}
 long_power_nomiss_h <- long_power_nomiss %>%
   ungroup() %>%
   mutate(sample_size = gsub("^list\\(|\\)$", "", as.character(sample_size)),
@@ -409,16 +491,36 @@ long_power_combined <- bind_rows(long_power_nomiss_h,
                                     long_power_miss_h)
 ```
 
-```{r simglm-power-curve-h, message = FALSE}
-ggplot(long_power_combined, aes(x = sample_size, y = power, 
+```{r long-power-curve-h, message = FALSE, echo = TRUE}
+long_power_sex <- filter(long_power_combined, term == 'sex')
+
+ggplot(long_power_sex, aes(x = reorder(sample_size, desc(power)), y = power, 
                           group = missing)) + 
   geom_point(aes(shape = missing), size = 1.5, color = 'gray40') + 
+  geom_line(aes(linetype = missing), size = 1) +
   geom_hline(yintercept = 0.8, linetype = 2, color = 'gray30') + 
-  geom_smooth(aes(linetype = missing), size = 1, se = FALSE) +
+  #geom_smooth(aes(linetype = missing), size = 1, se = FALSE) +
   #geom_vline(xintercept = 1488, linetype = 2, color = 'gray30') +
-  scale_x_continuous("Sample Size", breaks = seq(0, 2000, 200)) + 
-  scale_y_continuous("Power", breaks = seq(0, 1, .2)) +
-  theme_bw(base_size = 14)
+  xlab("Sample Size") + 
+  scale_y_continuous("Power", breaks = seq(0, 1, .2), limits = c(0, 1)) +
+  theme_bw(base_size = 14) + 
+  coord_flip()
+```
+
+```{r long-power-curve-ts, message = FALSE, echo = TRUE}
+long_power_timesex <- filter(long_power_combined, term == 'time:sex')
+
+ggplot(long_power_timesex, aes(x = reorder(sample_size, desc(power)), y = power, 
+                          group = missing)) + 
+  geom_point(aes(shape = missing), size = 1.5, color = 'gray40') + 
+  geom_line(aes(linetype = missing), size = 1) +
+  geom_hline(yintercept = 0.8, linetype = 2, color = 'gray30') + 
+  #geom_smooth(aes(linetype = missing), size = 1, se = FALSE) +
+  #geom_vline(xintercept = 1488, linetype = 2, color = 'gray30') +
+  xlab("Sample Size") + 
+  scale_y_continuous("Power", breaks = seq(0, 1, .2), limits = c(0, 1)) +
+  theme_bw(base_size = 14) + 
+  coord_flip()
 ```
 
 # Summary
@@ -428,7 +530,7 @@ ggplot(long_power_combined, aes(x = sample_size, y = power,
 
 # References
 ```{r create_r-references}
-r_refs(file = "r-references.bib")
+r_refs(file = "master.bib")
 ```
 
 \begingroup
