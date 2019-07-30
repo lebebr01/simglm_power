@@ -245,7 +245,7 @@ replicate_sim %>%
                      type_1_error = FALSE, precision = TRUE) %>%
   knitr::kable(digits = 2, format = 'latex', booktabs = TRUE,
         caption = "Statistical power and precision output obtained from the simglm package.", 
-        col.names = c('Term', 'Avg Est', 'Power', 'Avg TS', 'Est SD', 'Avg SE', 
+        col.names = c('Term', 'Avg Est', 'Power', 'Avg TS', 'Crit Value', 'Est SD', 'Avg SE', 
         'Precision', 'Repl'))
 ```
 
@@ -465,7 +465,7 @@ long_models %>%
                      type_1_error = FALSE, precision = TRUE) %>%
   knitr::kable(digits = 2, format = 'latex', booktabs = TRUE,
         caption = "Statistical power and precision output obtained from the repeated measures example.", 
-        col.names = c('Term', 'Avg Est', 'Power', 'Avg TS', 'Est SD', 'Avg SE', 
+        col.names = c('Term', 'Avg Est', 'Power', 'Avg TS', 'Crit Value', 'Est SD', 'Avg SE', 
         'Precision', 'Repl'))
 ```
 
